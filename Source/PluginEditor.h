@@ -13,10 +13,10 @@ private:
         std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attachment;
     };
     GuitarPolisherProcessor& processor;
-    std::array<Dial,12> dials;
-    juce::ComboBox hpSlope,lpSlope;
-    juce::Label hpSlopeLabel,lpSlopeLabel;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> hpAttachment,lpAttachment;
+    std::array<Dial,13> dials;
+    juce::ComboBox hpSlope,lpSlope,compMode,compMakeup;
+    juce::Label hpSlopeLabel,lpSlopeLabel,compModeLabel,compMakeupLabel;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> hpAttachment,lpAttachment,compModeAttachment,compMakeupAttachment;
     float meter=0;
     void timerCallback() override;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(GuitarPolisherEditor)

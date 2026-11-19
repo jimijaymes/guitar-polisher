@@ -40,7 +40,7 @@ GuitarPolisherEditor::GuitarPolisherEditor(GuitarPolisherProcessor& p):AudioProc
         label->setJustificationType(juce::Justification::centred);
         addAndMakeVisible(*label);
     }
-    setSize(930,510);
+    setSize(1040,650);
     startTimerHz(25);
 }
 void GuitarPolisherEditor::paint(juce::Graphics& g) {
@@ -67,19 +67,21 @@ void GuitarPolisherEditor::paint(juce::Graphics& g) {
     g.setColour(muted);
     g.drawText(juce::String(meter,1)+" dB",738,77,95,18,juce::Justification::centred);
     g.setFont(juce::Font(juce::FontOptions(11.0f)));
-    g.drawText("INDEPENDENT AUDIO   •   VST3",34,478,450,20,juce::Justification::centredLeft);
+    g.drawText("INDEPENDENT AUDIO   •   VST3   •   v0.2",34,618,450,20,juce::Justification::centredLeft);
 }
 void GuitarPolisherEditor::resized() {
     for(size_t i=0;i<dials.size();++i){
-        const int row=(int)i/6,col=(int)i%6;
-        const int x=32+col*146,y=115+row*160;
-        dials[i].slider.setBounds(x,y,132,112);
-        dials[i].label.setBounds(x,y+109,132,23);
+        const int section=i<4?0:(i<8?1:2);
+        const int local=i<4?(int)i:(i<8?(int)i-4:(int)i-8);
+        const int x=35+section*338+(local%2)*156;
+        const int y=160+(local/2)*115;
+        dials[i].slider.setBounds(x,y,140,92);
+        dials[i].label.setBounds(x,y+88,140,22);
     }
-    hpSlopeLabel.setBounds(76,438,105,22);
-    hpSlope.setBounds(180,438,125,26);
-    lpSlopeLabel.setBounds(360,438,105,22);
-    lpSlope.setBounds(465,438,125,26);
+    hpSlopeLabel.setBounds(40,550,96,22); hpSlope.setBounds(135,550,125,26);
+    lpSlopeLabel.setBounds(284,550,95,22); lpSlope.setBounds(375,550,125,26);
+    compModeLabel.setBounds(530,550,110,22); compMode.setBounds(640,550,135,26);
+    compMakeupLabel.setBounds(785,550,110,22); compMakeup.setBounds(896,550,116,26);
 }
 void GuitarPolisherEditor::timerCallback(){
     const float next=processor.gainReductionDb.load(std::memory_order_relaxed);

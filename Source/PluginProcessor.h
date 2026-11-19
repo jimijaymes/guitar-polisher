@@ -28,8 +28,8 @@ public:
 private:
     static juce::AudioProcessorValueTreeState::ParameterLayout layout();
     using Filter=juce::dsp::IIR::Filter<float>;
-    std::array<Filter,2> mid, shelf;
-    std::array<float,2> hp1{},hp2{},lp1{},lp2{},lp3{},satLow{};
+    std::array<Filter,2> mid, shelf, hpPeak;
+    std::array<float,2> hp1{},hp2{},lp1{},lp2{},lp3{},satLow{},satHigh{},compLow{};
     std::array<float,2> compEnvelope{};
     std::unique_ptr<juce::dsp::Oversampling<float>> oversampling;
     juce::AudioBuffer<float> colourBuffer;
