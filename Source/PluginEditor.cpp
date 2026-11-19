@@ -1,90 +1,109 @@
 #include "PluginEditor.h"
+#include <cmath>
 namespace {
-const juce::Colour dark(0xff192326),panel(0xff28373a),white(0xffeee8d8),teal(0xff61d0bd),muted(0xffa9b7b5);
+const juce::Colour bg(0xff0c1019), body(0xff1c2635), light(0xffe9edf1), dim(0xff9aa9bb);
+const juce::Colour cyan(0xff59e0d2), orange(0xffffb35c), border(0xff394c60);
 }
 GuitarPolisherEditor::GuitarPolisherEditor(GuitarPolisherProcessor& p):AudioProcessorEditor(p),processor(p) {
-    const char* ids[]={"hpf","lpf","resonance","midfreq","midgain","midq","shelf","shelffreq","satfreq","drive","comp","output"};
-    const char* names[]={"HIGH PASS","LOW PASS","RESONANCE","MID FREQ","MID GAIN","MID Q","HIGH SHELF","SHELF FREQ","SAT FOCUS","SAT DRIVE","COMPRESS","OUTPUT"};
+
+    const char* ids[]={"hpf","lpf","resonance","midfreq","midgain","midq","shelf","shelffreq","satfreq","satwidth","drive","comp","output"};
+    const char* names[]={"HIGH PASS","LOW PASS","LP RESONANCE","MID FREQ","MID GAIN","MID WIDTH / Q","HIGH SHELF","SHELF FREQ","SAT FOCUS","SAT WIDTH","SAT DRIVE","COMPRESS","OUTPUT"};
     for(size_t i=0;i<dials.size();++i){
         auto& d=dials[i];
         d.slider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-        d.slider.setTextBoxStyle(juce::Slider::TextBoxBelow,false,92,20);
-        d.slider.setColour(juce::Slider::rotarySliderFillColourId,teal);
-        d.slider.setColour(juce::Slider::rotarySliderOutlineColourId,muted.withAlpha(0.45f));
-        d.slider.setColour(juce::Slider::thumbColourId,white);
-        d.slider.setColour(juce::Slider::textBoxTextColourId,white);
-        d.slider.setColour(juce::Slider::textBoxOutlineColourId,juce::Colours::transparentBlack);
+        d.slider.setTextBoxStyle(juce::Slider::TextBoxBelow,false,105,19);
+        d.slider.setLookAndFeel(&dialLook);
+        d.slider.setColour(juce::Slider::textBoxTextColourId,light);
         d.slider.setColour(juce::Slider::textBoxBackgroundColourId,juce::Colours::transparentBlack);
+        d.slider.setColour(juce::Slider::textBoxOutlineColourId,juce::Colours::transparentBlack);
         addAndMakeVisible(d.slider);
         d.label.setText(names[i],juce::dontSendNotification);
         d.label.setJustificationType(juce::Justification::centred);
-        d.label.setColour(juce::Label::textColourId,white);
-        d.label.setFont(juce::Font(juce::FontOptions(12.0f,juce::Font::bold)));
+        d.label.setColour(juce::Label::textColourId,dim);
+        d.label.setFont(juce::Font(juce::FontOptions(11.0f,juce::Font::bold)));
         addAndMakeVisible(d.label);
         d.attachment=std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(p.parameters,ids[i],d.slider);
     }
     hpSlope.addItem("6 dB/oct",1);hpSlope.addItem("12 dB/oct",2);
     lpSlope.addItem("6 dB/oct",1);lpSlope.addItem("12 dB/oct",2);lpSlope.addItem("18 dB/oct",3);
-    for(auto* combo:{&hpSlope,&lpSlope}){
-        combo->setColour(juce::ComboBox::backgroundColourId,dark);
-        combo->setColour(juce::ComboBox::textColourId,white);
-        combo->setColour(juce::ComboBox::outlineColourId,teal);
-        addAndMakeVisible(*combo);
+    for(auto* c:{&hpSlope,&lpSlope}){
+        c->setColour(juce::ComboBox::backgroundColourId,bg);
+        c->setColour(juce::ComboBox::textColourId,light);
+        c->setColour(juce::ComboBox::outlineColourId,border);
+        addAndMakeVisible(*c);
     }
     hpAttachment=std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(p.parameters,"hpslope",hpSlope);
     lpAttachment=std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(p.parameters,"lpslope",lpSlope);
-    hpSlopeLabel.setText("HP SLOPE",juce::dontSendNotification);
-    lpSlopeLabel.setText("LP SLOPE",juce::dontSendNotification);
-    for(auto* label:{&hpSlopeLabel,&lpSlopeLabel}){
-        label->setColour(juce::Label::textColourId,white);
-        label->setJustificationType(juce::Justification::centred);
+    for(auto* label:{&hpSlopeLabel,&lpSlopeLabel,&highsLabel,&makeupLabel}){
+        label->setColour(juce::Label::textColourId,dim);
+        label->setJustificationType(juce::Justification::centredLeft);
+        label->setFont(juce::Font(juce::FontOptions(11.0f,juce::Font::bold)));
         addAndMakeVisible(*label);
     }
-    setSize(1040,650);
+    hpSlopeLabel.setText("HP SLOPE",juce::dontSendNotification);
+    lpSlopeLabel.setText("LP SLOPE",juce::dontSendNotification);
+    highsLabel.setText("HF ONLY  /  3 kHz+",juce::dontSendNotification);
+    makeupLabel.setText("AUTO MAKEUP",juce::dontSendNotification);
+    for(auto* b:{&highsSwitch,&makeupSwitch}){
+        b->setButtonText("");
+        b->setColour(juce::ToggleButton::tickColourId,cyan);
+        b->setColour(juce::ToggleButton::tickDisabledColourId,dim);
+        addAndMakeVisible(*b);
+    }
+    highsAttachment=std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(p.parameters,"highonly",highsSwitch);
+    makeupAttachment=std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(p.parameters,"compmakeup",makeupSwitch);
+    setSize(1130,690);
     startTimerHz(25);
 }
-void GuitarPolisherEditor::paint(juce::Graphics& g) {
-    g.fillAll(dark);
-    g.setColour(panel);
-    g.fillRoundedRectangle(getLocalBounds().toFloat().reduced(12),12);
-    g.setColour(teal);
-    g.drawRoundedRectangle(getLocalBounds().toFloat().reduced(12),12,2);
-    g.setFont(juce::Font(juce::FontOptions(32.0f,juce::Font::bold)));
-    g.setColour(white);
-    g.drawText("GUITAR POLISHER",34,20,560,45,juce::Justification::centredLeft);
-    g.setFont(juce::Font(juce::FontOptions(12.0f)));
-    g.setColour(muted);
-    g.drawText("POST-MIC TONE SHAPING  /  SATURATION  /  LEVELING",36,65,620,22,juce::Justification::centredLeft);
-    g.setColour(teal);
-    g.drawLine(32,99,898,99,2);
-    g.setColour(white);
-    g.setFont(juce::Font(juce::FontOptions(13.0f,juce::Font::bold)));
-    g.drawText("GAIN REDUCTION",680,27,210,23,juce::Justification::centred);
-    g.setColour(juce::Colour(0xff0d1618));
-    g.fillRoundedRectangle(698,57,174,16,5);
-    g.setColour(teal);
-    g.fillRoundedRectangle(698,57,174*juce::jlimit(0.0f,1.0f,meter/24.0f),16,5);
-    g.setColour(muted);
-    g.drawText(juce::String(meter,1)+" dB",738,77,95,18,juce::Justification::centred);
-    g.setFont(juce::Font(juce::FontOptions(11.0f)));
-    g.drawText("INDEPENDENT AUDIO   •   VST3   •   v0.2",34,618,450,20,juce::Justification::centredLeft);
+GuitarPolisherEditor::~GuitarPolisherEditor(){
+    for(auto& d:dials)d.slider.setLookAndFeel(nullptr);
 }
-void GuitarPolisherEditor::resized() {
-    for(size_t i=0;i<dials.size();++i){
-        const int section=i<4?0:(i<8?1:2);
-        const int local=i<4?(int)i:(i<8?(int)i-4:(int)i-8);
-        const int x=35+section*338+(local%2)*156;
-        const int y=160+(local/2)*115;
-        dials[i].slider.setBounds(x,y,140,92);
-        dials[i].label.setBounds(x,y+88,140,22);
+void GuitarPolisherEditor::paint(juce::Graphics& g) {
+    g.fillAll(bg);
+    g.setGradientFill(juce::ColourGradient(body,0,0,bg,(float)getWidth(),(float)getHeight(),false));
+    g.fillRoundedRectangle(getLocalBounds().toFloat().reduced(12),18);
+    g.setColour(border);g.drawRoundedRectangle(getLocalBounds().toFloat().reduced(12),18,1.4f);
+    g.setColour(cyan);g.fillRoundedRectangle(32,29,6,59,3);
+    g.setColour(light);g.setFont(juce::Font(juce::FontOptions(37.0f,juce::Font::bold)));
+    g.drawText("GUITAR / POLISHER",52,26,660,52,juce::Justification::centredLeft);
+    g.setColour(dim);g.setFont(juce::Font(juce::FontOptions(12.0f)));
+    g.drawText("INDEPENDENT AUDIO     •     POST-MIC FINISHING CHANNEL     •     0.3",55,78,720,20,juce::Justification::centredLeft);
+    const char* section[]={"01   FILTERS","02   TONE SHAPING","03   SATURATION","04   DYNAMICS"};
+    const int xs[]={26,302,578,854};
+    for(int i=0;i<4;++i){
+        g.setColour(juce::Colour(0xff111b29));g.fillRoundedRectangle((float)xs[i],129,262,435,13);
+        g.setColour(border);g.drawRoundedRectangle((float)xs[i],129,262,435,13,1);
+        g.setColour(i==3?orange:cyan);g.fillRoundedRectangle((float)xs[i]+13,145,4,20,2);
+        g.setFont(juce::Font(juce::FontOptions(13.0f,juce::Font::bold)));
+        g.drawText(section[i],xs[i]+25,144,220,23,juce::Justification::centredLeft);
     }
-    hpSlopeLabel.setBounds(40,550,96,22); hpSlope.setBounds(135,550,125,26);
-    lpSlopeLabel.setBounds(284,550,95,22); lpSlope.setBounds(375,550,125,26);
-    compModeLabel.setBounds(530,550,110,22); compMode.setBounds(640,550,135,26);
-    compMakeupLabel.setBounds(785,550,110,22); compMakeup.setBounds(896,550,116,26);
+    g.setColour(juce::Colour(0xff09121c));g.fillRoundedRectangle(822,29,283,70,9);
+    g.setColour(dim);g.setFont(juce::Font(juce::FontOptions(11.0f,juce::Font::bold)));
+    g.drawText("COMPRESSOR  /  GAIN REDUCTION",838,34,251,17,juce::Justification::centred);
+    g.setColour(border);g.fillRoundedRectangle(845,59,238,12,5);
+    g.setColour(orange);g.fillRoundedRectangle(845,59,238.0f*juce::jlimit(0.0f,1.0f,meter/24.0f),12,5);
+    g.setColour(light);g.drawText(juce::String(meter,1)+" dB",924,76,83,18,juce::Justification::centred);
+    g.setColour(dim);g.setFont(juce::Font(juce::FontOptions(11.0f)));
+    g.drawText("SIGNAL PATH  •  HP → EQ → SAT → COMP → RESONANT LP",35,653,900,20,juce::Justification::centredLeft);
+}
+void GuitarPolisherEditor::resized(){
+    // Section positions follow processing order; controls never overlap.
+    const int sec[]={0,0,0,1,1,1,1,1,2,2,2,3,3};
+    const int slot[]={0,1,2,0,1,2,3,4,0,1,2,0,1};
+    const int xs[]={26,302,578,854};
+    for(size_t i=0;i<dials.size();++i){
+        const int x=xs[sec[i]]+12+(slot[i]%2)*124;
+        const int y=186+(slot[i]/2)*113;
+        dials[i].slider.setBounds(x,y,116,89);
+        dials[i].label.setBounds(x-2,y+85,120,19);
+    }
+    hpSlopeLabel.setBounds(45,571,85,22);hpSlope.setBounds(128,570,139,26);
+    lpSlopeLabel.setBounds(315,571,85,22);lpSlope.setBounds(399,570,139,26);
+    highsSwitch.setBounds(875,472,28,26);highsLabel.setBounds(908,474,180,23);
+    makeupSwitch.setBounds(875,514,28,26);makeupLabel.setBounds(908,516,180,23);
 }
 void GuitarPolisherEditor::timerCallback(){
     const float next=processor.gainReductionDb.load(std::memory_order_relaxed);
     meter+=0.25f*(next-meter);
-    repaint(680,24,210,75);
+    repaint(822,29,283,70);
 }

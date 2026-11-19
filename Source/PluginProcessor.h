@@ -11,7 +11,7 @@ public:
     void processBlock(juce::AudioBuffer<float>&, juce::MidiBuffer&) override;
     juce::AudioProcessorEditor* createEditor() override;
     bool hasEditor() const override { return true; }
-    const juce::String getName() const override { return "Guitar Polisher"; }
+    const juce::String getName() const override { return "Guitar Polisher 0.3"; }
     bool acceptsMidi() const override { return false; }
     bool producesMidi() const override { return false; }
     bool isMidiEffect() const override { return false; }
@@ -28,8 +28,8 @@ public:
 private:
     static juce::AudioProcessorValueTreeState::ParameterLayout layout();
     using Filter=juce::dsp::IIR::Filter<float>;
-    std::array<Filter,2> mid, shelf, hpPeak;
-    std::array<float,2> hp1{},hp2{},lp1{},lp2{},lp3{},satLow{},satHigh{},compLow{};
+    std::array<Filter,2> mid, shelf, lpPeak;
+    std::array<float,2> hp1{},hp2{},lp1{},lp2{},lp3{},satLow{},satHigh{},compLow{},compLow2{};
     std::array<float,2> compEnvelope{};
     std::unique_ptr<juce::dsp::Oversampling<float>> oversampling;
     juce::AudioBuffer<float> colourBuffer;

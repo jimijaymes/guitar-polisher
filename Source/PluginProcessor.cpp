@@ -6,13 +6,13 @@ float onePole(float hz,double sr) { return std::exp(-2.0f*juce::MathConstants<fl
 float dbGain(float db) { return juce::Decibels::decibelsToGain(db); }
 }
 juce::AudioProcessorValueTreeState::ParameterLayout GuitarPolisherProcessor::layout() {
-    using F=juce::AudioParameterFloat; using C=juce::AudioParameterChoice;
+    using F=juce::AudioParameterFloat; using C=juce::AudioParameterChoice; using B=juce::AudioParameterBool;
     juce::AudioProcessorValueTreeState::ParameterLayout p;
     p.add(std::make_unique<F>(juce::ParameterID{"hpf",1},"High Pass (Hz)",juce::NormalisableRange<float>(30,350,1,0.5f),75));
     p.add(std::make_unique<C>(juce::ParameterID{"hpslope",1},"HP Slope",juce::StringArray{"6 dB/oct","12 dB/oct"},1));
     p.add(std::make_unique<F>(juce::ParameterID{"lpf",1},"Low Pass (Hz)",juce::NormalisableRange<float>(1500,20000,1,0.5f),10500));
     p.add(std::make_unique<C>(juce::ParameterID{"lpslope",1},"LP Slope",juce::StringArray{"6 dB/oct","12 dB/oct","18 dB/oct"},1));
-    p.add(std::make_unique<F>(juce::ParameterID{"resonance",1},"HP Resonance",juce::NormalisableRange<float>(0,100,0.1f),0));
+    p.add(std::make_unique<F>(juce::ParameterID{"resonance",1},"LP Resonance",juce::NormalisableRange<float>(0,100,0.1f),0));
     p.add(std::make_unique<F>(juce::ParameterID{"midfreq",1},"Mid Frequency (Hz)",juce::NormalisableRange<float>(180,4500,1,0.35f),1100));
     p.add(std::make_unique<F>(juce::ParameterID{"midgain",1},"Mid Gain (dB)",juce::NormalisableRange<float>(-12,12,0.1f),0));
     p.add(std::make_unique<F>(juce::ParameterID{"midq",1},"Mid Q",juce::NormalisableRange<float>(0.3f,4.0f,0.01f),0.9f));
@@ -22,8 +22,8 @@ juce::AudioProcessorValueTreeState::ParameterLayout GuitarPolisherProcessor::lay
     p.add(std::make_unique<F>(juce::ParameterID{"satwidth",1},"Saturation Bandwidth (oct)",juce::NormalisableRange<float>(0.5f,5.0f,0.1f),2.0f));
     p.add(std::make_unique<F>(juce::ParameterID{"drive",1},"Saturation Drive (dB)",juce::NormalisableRange<float>(0,18,0.1f),3));
     p.add(std::make_unique<F>(juce::ParameterID{"comp",1},"Smooth Compression",juce::NormalisableRange<float>(0,100,0.1f),25));
-    p.add(std::make_unique<C>(juce::ParameterID{"compmode",1},"Compressor Mode",juce::StringArray{"Full Band","Highs 3k+"},0));
-    p.add(std::make_unique<C>(juce::ParameterID{"compmakeup",1},"Comp Makeup",juce::StringArray{"Off","On"},0));
+    p.add(std::make_unique<B>(juce::ParameterID{"highonly",1},"High Frequency Compression Only",false));
+    p.add(std::make_unique<B>(juce::ParameterID{"compmakeup",1},"Auto Makeup Gain",false));
     p.add(std::make_unique<F>(juce::ParameterID{"output",1},"Output (dB)",juce::NormalisableRange<float>(-18,18,0.1f),0));
     return p;
 }
@@ -32,11 +32,11 @@ GuitarPolisherProcessor::GuitarPolisherProcessor()
 .withOutput("Output",juce::AudioChannelSet::stereo(),true)),parameters(*this,nullptr,"STATE",layout()) {}
 void GuitarPolisherProcessor::prepareToPlay(double sr,int block) {
     sampleRateHz=sr; maxBlock=juce::jmax(1,block);
-    hp1.fill(0); hp2.fill(0); lp1.fill(0); lp2.fill(0); lp3.fill(0); satLow.fill(0); satHigh.fill(0); compEnvelope.fill(0); compLow.fill(0);
+    hp1.fill(0); hp2.fill(0); lp1.fill(0); lp2.fill(0); lp3.fill(0); satLow.fill(0); satHigh.fill(0); compEnvelope.fill(0); compLow.fill(0); compLow2.fill(0);
     juce::dsp::ProcessSpec spec{sr,(juce::uint32)maxBlock,1};
     for(auto& f:mid){ f.prepare(spec); f.reset(); }
     for(auto& f:shelf){ f.prepare(spec); f.reset(); }
-    for(auto& f:hpPeak){ f.prepare(spec); f.reset(); }
+    for(auto& f:lpPeak){ f.prepare(spec); f.reset(); }
     colourBuffer.setSize(2,maxBlock);
     oversampling=std::make_unique<juce::dsp::Oversampling<float>>(2,2,juce::dsp::Oversampling<float>::filterHalfBandPolyphaseIIR,true,false);
     oversampling->initProcessing((size_t)maxBlock);
@@ -56,7 +56,7 @@ void GuitarPolisherProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce
     const float satLo=onePole(juce::jmax(20.0f,satCenter/halfBand),sampleRateHz*4.0);
     const float satHi=onePole(juce::jmin((float)sampleRateHz*1.8f,satCenter*halfBand),sampleRateHz*4.0);
     const float compXover=onePole(3000.0f,sampleRateHz);
-    const bool highsOnly=param("compmode")>0.5f;
+    const bool highsOnly=param("highonly")>0.5f;
     const bool autoMakeup=param("compmakeup")>0.5f;
     const float drive=dbGain(param("drive"));
     const float out=dbGain(param("output"));
@@ -68,10 +68,10 @@ void GuitarPolisherProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce
     const float shelfHz=juce::jlimit(20.0f,(float)sampleRateHz*0.45f,param("shelffreq"));
     auto midCoeffs=juce::dsp::IIR::Coefficients<float>::makePeakFilter(sampleRateHz,midHz,param("midq"),dbGain(param("midgain")));
     auto shelfCoeffs=juce::dsp::IIR::Coefficients<float>::makeHighShelf(sampleRateHz,shelfHz,0.7071f,dbGain(param("shelf")));
-    // Peak just below the high-pass cutoff. At zero resonance, the peak is unity.
-    const float peakHz=juce::jlimit(20.0f,(float)sampleRateHz*0.45f,param("hpf")*0.78f);
-    auto peakCoeffs=juce::dsp::IIR::Coefficients<float>::makePeakFilter(sampleRateHz,peakHz,1.5f,dbGain(12.0f*res));
-    for(int c=0;c<channels;++c){ *mid[(size_t)c].coefficients=*midCoeffs; *shelf[(size_t)c].coefficients=*shelfCoeffs; *hpPeak[(size_t)c].coefficients=*peakCoeffs; }
+    // Resonant emphasis immediately below the LP cutoff, ahead of the final LP stage.
+    const float peakHz=juce::jlimit(20.0f,(float)sampleRateHz*0.43f,param("lpf")*0.82f);
+    auto peakCoeffs=juce::dsp::IIR::Coefficients<float>::makePeakFilter(sampleRateHz,peakHz,2.0f,dbGain(12.0f*res));
+    for(int c=0;c<channels;++c){ *mid[(size_t)c].coefficients=*midCoeffs; *shelf[(size_t)c].coefficients=*shelfCoeffs; *lpPeak[(size_t)c].coefficients=*peakCoeffs; }
     float maxGR=0;
     for(int offset=0;offset<n;offset+=maxBlock) {
         const int count=juce::jmin(maxBlock,n-offset);
@@ -83,7 +83,6 @@ void GuitarPolisherProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce
                 hp1[(size_t)c]=hp*hp1[(size_t)c]+(1-hp)*x;
                 x-=hp1[(size_t)c];
                 if(hpStages==2){hp2[(size_t)c]=hp*hp2[(size_t)c]+(1-hp)*x;x-=hp2[(size_t)c];}
-                x=hpPeak[(size_t)c].processSample(x);
                 x=mid[(size_t)c].processSample(x);
                 x=shelf[(size_t)c].processSample(x);
                 target[j]=x;
@@ -114,7 +113,12 @@ void GuitarPolisherProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce
                 const float x=src[j];
                 auto& low=compLow[(size_t)c];
                 low=compXover*low+(1-compXover)*x;
-                const float band=highsOnly ? x-low : x;
+                auto& low2=compLow2[(size_t)c];
+                low2=compXover*low2+(1-compXover)*low;
+                // Complementary bands: low2 + (x - low2) == x.
+                // The low band remains untouched; only the high band is compressed.
+                const float high=x-low2;
+                const float band=highsOnly ? high : x;
                 const float level=std::abs(band);
                 env=(level>env?attack:release)*env+(1-(level>env?attack:release))*level;
                 const float db=juce::Decibels::gainToDecibels(juce::jmax(env,1.0e-8f),-160.0f);
@@ -127,7 +131,8 @@ void GuitarPolisherProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce
                 }
                 maxGR=juce::jmax(maxGR,gr);
                 const float makeup=autoMakeup && comp>0.0001f ? dbGain(gr*0.65f) : 1.0f;
-                float y=highsOnly ? low+(x-low)*dbGain(-gr)*makeup : x*dbGain(-gr)*makeup;
+                float y=highsOnly ? low2+high*dbGain(-gr)*makeup : x*dbGain(-gr)*makeup;
+                y=lpPeak[(size_t)c].processSample(y);
                 // Last stage: low pass after EQ, saturation and compression.
                 lp1[(size_t)c]=lp*lp1[(size_t)c]+(1-lp)*y;
                 y=lp1[(size_t)c];
