@@ -43,7 +43,7 @@ void GuitarPolisherProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce
     juce::ScopedNoDenormals noDenormals;
     const int n=buffer.getNumSamples(),channels=juce::jmin(2,buffer.getNumChannels());
     if(!channels)return;
-    const auto param=[this](const char* id){return *parameters.getRawParameterValue(id);};
+    const auto param=[this](const char* id) -> float { return parameters.getRawParameterValue(id)->load(std::memory_order_relaxed); };
     const float hp=onePole(param("hpf"),sampleRateHz),lp=onePole(param("lpf"),sampleRateHz);
     const int hpStages=(int)param("hpslope")+1,lpStages=(int)param("lpslope")+1;
     const float res=param("resonance")*0.01f;
