@@ -32,7 +32,7 @@ GuitarPolisherProcessor::GuitarPolisherProcessor()
 .withOutput("Output",juce::AudioChannelSet::stereo(),true)),parameters(*this,nullptr,"STATE",layout()) {}
 void GuitarPolisherProcessor::prepareToPlay(double sr,int block) {
     sampleRateHz=sr; maxBlock=juce::jmax(1,block);
-    hp1.fill(0); hp2.fill(0); lp1.fill(0); lp2.fill(0); lp3.fill(0); satLow.fill(0); satHigh.fill(0); compEnvelope.fill(0); compLow.fill(0); compLow2.fill(0);
+    hp1.fill(0); hp2.fill(0); lp1.fill(0); lp2.fill(0); lp3.fill(0); satLow.fill(0); satHigh.fill(0); satMemory.fill(0); satRecovery.fill(0); compEnvelope.fill(0); compLow.fill(0); compLow2.fill(0);
     juce::dsp::ProcessSpec spec{sr,(juce::uint32)maxBlock,1};
     for(auto& f:mid){ f.prepare(spec); f.reset(); }
     for(auto& f:shelf){ f.prepare(spec); f.reset(); }
@@ -100,8 +100,21 @@ void GuitarPolisherProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce
                 low=satLo*low+(1-satLo)*x;
                 high=satHi*high+(1-satHi)*x;
                 const float band=high-low;
-                // Saturate only the selected frequency band, leaving the rest unchanged.
-                samples[j]=x-band+std::tanh(band*drive)/drive;
+                // Frequency-shaped discrete preamp approximation: dynamic bias,
+                // asymmetric transfer and slow charge recovery. 4x oversampled.
+                auto& memory=satMemory[(size_t)c];
+                auto& recovery=satRecovery[(size_t)c];
+                const float recoveryPole=onePole(28.0f,sampleRateHz*4.0);
+                recovery=recoveryPole*recovery+(1.0f-recoveryPole)*std::abs(band);
+                const float memoryPole=onePole(140.0f,sampleRateHz*4.0);
+                memory=memoryPole*memory+(1.0f-memoryPole)*band;
+                const float bias=0.12f*juce::jmin(1.0f,recovery)*juce::jmin(1.0f,(drive-1.0f)*0.4f);
+                const float dynamicDrive=drive*(1.0f+0.18f*juce::jmin(1.0f,std::abs(memory)));
+                const float z=band*dynamicDrive+bias;
+                const float nonlinear=(std::tanh(z)-std::tanh(bias))/
+                    (dynamicDrive*juce::jmax(0.25f,1.0f-std::tanh(bias)*std::tanh(bias)));
+                const float amount=juce::jlimit(0.0f,1.0f,(drive-1.0f)/6.95f);
+                samples[j]=x+amount*(nonlinear-band);
             }
         }
         oversampling->processSamplesDown(slice);
