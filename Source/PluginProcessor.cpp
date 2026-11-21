@@ -24,14 +24,36 @@ juce::AudioProcessorValueTreeState::ParameterLayout GuitarPolisherProcessor::lay
     p.add(std::make_unique<F>(juce::ParameterID{"comp",1},"Smooth Compression",juce::NormalisableRange<float>(0,100,0.1f),25));
     p.add(std::make_unique<B>(juce::ParameterID{"highonly",1},"High Frequency Compression Only",false));
     p.add(std::make_unique<B>(juce::ParameterID{"compmakeup",1},"Auto Makeup Gain",false));
+    p.add(std::make_unique<B>(juce::ParameterID{"apiInputOn",1},"API Input Transformer Enabled",false));
+    p.add(std::make_unique<B>(juce::ParameterID{"apiOutputOn",1},"API Output Transformer Enabled",false));
+    p.add(std::make_unique<F>(juce::ParameterID{"apiInputDrive",1},"API Input Drive (dB)",juce::NormalisableRange<float>(0.f,24.f,0.1f),6.f));
+    p.add(std::make_unique<F>(juce::ParameterID{"apiOutputDrive",1},"API Output Drive (dB)",juce::NormalisableRange<float>(0.f,24.f,0.1f),6.f));
     p.add(std::make_unique<F>(juce::ParameterID{"output",1},"Output (dB)",juce::NormalisableRange<float>(-18,18,0.1f),0));
     return p;
 }
 GuitarPolisherProcessor::GuitarPolisherProcessor()
 : AudioProcessor(BusesProperties().withInput("Input",juce::AudioChannelSet::stereo(),true)
 .withOutput("Output",juce::AudioChannelSet::stereo(),true)),parameters(*this,nullptr,"STATE",layout()) {}
+float GuitarPolisherProcessor::apiStage(float x,int channel,bool output,float driveDb) {
+    // Approximate API 2622 input / 2503 output transformer plus 2520 amplifier voicing.
+    // Independent magnetic state, low-frequency flux saturation and mild asymmetric colour.
+    auto& low=(output?apiOutputLow:apiInputLow)[(size_t)channel];
+    auto& flux=(output?apiOutputFlux:apiInputFlux)[(size_t)channel];
+    const float a=onePole(output?110.f:75.f,sampleRateHz);
+    const float b=onePole(output?27.f:38.f,sampleRateHz);
+    low=a*low+(1.f-a)*x;
+    flux=b*flux+(1.f-b)*low;
+    const float drive=dbGain(driveDb);
+    const float bias=output?.055f:.025f;
+    const float core=(output?1.4f:1.1f)*(1.f+.4f*juce::jmin(1.f,std::abs(flux)));
+    const float z=x*drive*core+bias;
+    const float coloured=(std::tanh(z)-std::tanh(bias))/(drive*core*juce::jmax(.2f,1.f-std::tanh(bias)*std::tanh(bias)));
+    const float blend=juce::jlimit(.0f,.65f,.09f+driveDb*.018f);
+    return x*(1.f-blend)+coloured*blend;
+}
 void GuitarPolisherProcessor::prepareToPlay(double sr,int block) {
     sampleRateHz=sr; maxBlock=juce::jmax(1,block);
+    apiInputLow.fill(0);apiInputFlux.fill(0);apiOutputLow.fill(0);apiOutputFlux.fill(0);
     hp1.fill(0); hp2.fill(0); lp1.fill(0); lp2.fill(0); lp3.fill(0); satLow.fill(0); satHigh.fill(0); satMemory.fill(0); satRecovery.fill(0); compEnvelope.fill(0); compLow.fill(0); compLow2.fill(0);
     juce::dsp::ProcessSpec spec{sr,(juce::uint32)maxBlock,1};
     for(auto& f:mid){ f.prepare(spec); f.reset(); }
@@ -60,6 +82,8 @@ void GuitarPolisherProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce
     const bool autoMakeup=param("compmakeup")>0.5f;
     const float drive=dbGain(param("drive"));
     const float out=dbGain(param("output"));
+    const bool apiInput=param("apiInputOn")>.5f,apiOutput=param("apiOutputOn")>.5f;
+    const float apiInDrive=param("apiInputDrive"),apiOutDrive=param("apiOutputDrive");
     const float comp=param("comp")*0.01f;
     const float threshold=-8.0f-28.0f*comp;
     const float attack=onePole(35.0f,sampleRateHz);
@@ -80,6 +104,7 @@ void GuitarPolisherProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce
             const float* source=buffer.getReadPointer(juce::jmin(c,channels-1),offset);
             for(int j=0;j<count;++j) {
                 float x=source[j];
+                if(apiInput)x=apiStage(x,c,false,apiInDrive);
                 hp1[(size_t)c]=hp*hp1[(size_t)c]+(1-hp)*x;
                 x-=hp1[(size_t)c];
                 if(hpStages==2){hp2[(size_t)c]=hp*hp2[(size_t)c]+(1-hp)*x;x-=hp2[(size_t)c];}
@@ -151,6 +176,7 @@ void GuitarPolisherProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce
                 y=lp1[(size_t)c];
                 if(lpStages>=2){lp2[(size_t)c]=lp*lp2[(size_t)c]+(1-lp)*y;y=lp2[(size_t)c];}
                 if(lpStages>=3){lp3[(size_t)c]=lp*lp3[(size_t)c]+(1-lp)*y;y=lp3[(size_t)c];}
+                if(apiOutput)y=apiStage(y,c,true,apiOutDrive);
                 dst[j]=y*out;
             }
         }
