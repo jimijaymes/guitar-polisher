@@ -52,6 +52,7 @@ GuitarPolisherEditor::GuitarPolisherEditor(GuitarPolisherProcessor& p):AudioProc
     }
     highsAttachment=std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(p.parameters,"highonly",highsSwitch);
     makeupAttachment=std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(p.parameters,"compmakeup",makeupSwitch);
+    apiInputSwitch.setButtonText("ON");apiOutputSwitch.setButtonText("ON");
     apiInputAttachment=std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(p.parameters,"apiInputOn",apiInputSwitch);
     apiOutputAttachment=std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(p.parameters,"apiOutputOn",apiOutputSwitch);
     setSize(1130,890);
