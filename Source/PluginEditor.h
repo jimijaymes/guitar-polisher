@@ -34,12 +34,12 @@ private:
     };
     GuitarPolisherProcessor& processor;
     PanelLookAndFeel dialLook;
-    std::array<Dial,13> dials;
+    std::array<Dial,15> dials;
     juce::ComboBox hpSlope,lpSlope;
-    juce::ToggleButton highsSwitch,makeupSwitch;
+    juce::ToggleButton highsSwitch,makeupSwitch,apiInputSwitch,apiOutputSwitch;
     juce::Label hpSlopeLabel,lpSlopeLabel,highsLabel,makeupLabel;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> hpAttachment,lpAttachment;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> highsAttachment,makeupAttachment;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> highsAttachment,makeupAttachment,apiInputAttachment,apiOutputAttachment;
     float meter=0;
     void timerCallback() override;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(GuitarPolisherEditor)
