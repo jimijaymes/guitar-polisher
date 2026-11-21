@@ -6,8 +6,8 @@ const juce::Colour cyan(0xff59e0d2), orange(0xffffb35c), border(0xff394c60);
 }
 GuitarPolisherEditor::GuitarPolisherEditor(GuitarPolisherProcessor& p):AudioProcessorEditor(p),processor(p) {
 
-    const char* ids[]={"hpf","lpf","resonance","midfreq","midgain","midq","shelf","shelffreq","satfreq","satwidth","drive","comp","output"};
-    const char* names[]={"HIGH PASS","LOW PASS","LP RESONANCE","MID FREQ","MID GAIN","MID WIDTH / Q","HIGH SHELF","SHELF FREQ","SAT FOCUS","SAT WIDTH","SAT DRIVE","COMPRESS","OUTPUT"};
+    const char* ids[]={"hpf","lpf","resonance","midfreq","midgain","midq","shelf","shelffreq","satfreq","satwidth","drive","comp","output","apiInputDrive","apiOutputDrive"};
+    const char* names[]={"HIGH PASS","LOW PASS","LP RESONANCE","MID FREQ","MID GAIN","MID WIDTH / Q","HIGH SHELF","SHELF FREQ","SAT FOCUS","SAT WIDTH","SAT DRIVE","COMPRESS","OUTPUT","API INPUT DRIVE","API OUTPUT DRIVE"};
     for(size_t i=0;i<dials.size();++i){
         auto& d=dials[i];
         d.slider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
@@ -44,7 +44,7 @@ GuitarPolisherEditor::GuitarPolisherEditor(GuitarPolisherProcessor& p):AudioProc
     lpSlopeLabel.setText("LP SLOPE",juce::dontSendNotification);
     highsLabel.setText("HF ONLY  /  3 kHz+",juce::dontSendNotification);
     makeupLabel.setText("AUTO MAKEUP",juce::dontSendNotification);
-    for(auto* b:{&highsSwitch,&makeupSwitch}){
+    for(auto* b:{&highsSwitch,&makeupSwitch,&apiInputSwitch,&apiOutputSwitch}){
         b->setButtonText("");
         b->setColour(juce::ToggleButton::tickColourId,cyan);
         b->setColour(juce::ToggleButton::tickDisabledColourId,dim);
@@ -52,7 +52,9 @@ GuitarPolisherEditor::GuitarPolisherEditor(GuitarPolisherProcessor& p):AudioProc
     }
     highsAttachment=std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(p.parameters,"highonly",highsSwitch);
     makeupAttachment=std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(p.parameters,"compmakeup",makeupSwitch);
-    setSize(1130,690);
+    apiInputAttachment=std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(p.parameters,"apiInputOn",apiInputSwitch);
+    apiOutputAttachment=std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(p.parameters,"apiOutputOn",apiOutputSwitch);
+    setSize(1130,890);
     startTimerHz(25);
 }
 GuitarPolisherEditor::~GuitarPolisherEditor(){
@@ -84,7 +86,11 @@ void GuitarPolisherEditor::paint(juce::Graphics& g) {
     g.setColour(orange);g.fillRoundedRectangle(845,59,238.0f*juce::jlimit(0.0f,1.0f,meter/24.0f),12,5);
     g.setColour(light);g.drawText(juce::String(meter,1)+" dB",924,76,83,18,juce::Justification::centred);
     g.setColour(dim);g.setFont(juce::Font(juce::FontOptions(11.0f)));
-    g.drawText("SIGNAL PATH  •  HP → EQ → SAT → COMP → RESONANT LP",35,653,900,20,juce::Justification::centredLeft);
+    g.drawText("SIGNAL PATH  •  API INPUT → HP → EQ → SAT → COMP → LP → API OUTPUT",35,653,1050,20,juce::Justification::centredLeft);
+    g.setColour(border);g.drawRoundedRectangle(26,700,1078,160,12,1.3f);
+    g.setColour(cyan);g.setFont(juce::Font(juce::FontOptions(14.0f,juce::Font::bold)));
+    g.drawText("API 2622 INPUT TRANSFORMER + 2520",42,712,480,24,juce::Justification::centredLeft);
+    g.drawText("API 2520 + 2503 OUTPUT TRANSFORMER",572,712,490,24,juce::Justification::centredLeft);
 }
 void GuitarPolisherEditor::resized(){
     // Section positions follow processing order; controls never overlap.
@@ -92,8 +98,8 @@ void GuitarPolisherEditor::resized(){
     const int slot[]={0,1,2,0,1,2,3,4,0,1,2,0,1};
     const int xs[]={26,302,578,854};
     for(size_t i=0;i<dials.size();++i){
-        const int x=xs[sec[i]]+12+(slot[i]%2)*124;
-        const int y=186+(slot[i]/2)*113;
+        const int x=i>=13?(i==13?195:720):xs[sec[i]]+12+(slot[i]%2)*124;
+        const int y=i>=13?740:186+(slot[i]/2)*113;
         dials[i].slider.setBounds(x,y,116,89);
         dials[i].label.setBounds(x-2,y+85,120,19);
     }
@@ -101,6 +107,7 @@ void GuitarPolisherEditor::resized(){
     lpSlopeLabel.setBounds(315,571,85,22);lpSlope.setBounds(399,570,139,26);
     highsSwitch.setBounds(875,472,28,26);highsLabel.setBounds(908,474,180,23);
     makeupSwitch.setBounds(875,514,28,26);makeupLabel.setBounds(908,516,180,23);
+    apiInputSwitch.setBounds(55,762,35,30);apiOutputSwitch.setBounds(590,762,35,30);
 }
 void GuitarPolisherEditor::timerCallback(){
     const float next=processor.gainReductionDb.load(std::memory_order_relaxed);
