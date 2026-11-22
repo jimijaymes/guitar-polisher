@@ -18,7 +18,7 @@ GuitarPolisherEditor::GuitarPolisherEditor(GuitarPolisherProcessor& p):AudioProc
         d.slider.setColour(juce::Slider::textBoxOutlineColourId,juce::Colours::transparentBlack);
         addAndMakeVisible(d.slider);
         d.label.setText(names[i],juce::dontSendNotification);
-        d.label.setJustificationType(juce::Justification::centred);
+        d.label.setJustificationType(juce::Justification::centred);d.label.setMinimumHorizontalScale(0.68f);
         d.label.setColour(juce::Label::textColourId,dim);
         d.label.setFont(juce::Font(juce::FontOptions(11.0f,juce::Font::bold)));
         addAndMakeVisible(d.label);
