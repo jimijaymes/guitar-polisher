@@ -102,10 +102,10 @@ void GuitarPolisherEditor::resized(){
         const int x=i>=13?(i==13?195:720):xs[sec[i]]+12+(slot[i]%2)*124;
         const int y=i>=13?740:186+(slot[i]/2)*113;
         dials[i].slider.setBounds(x,y,116,89);
-        dials[i].label.setBounds(x-2,y+85,120,19);
+        dials[i].label.setBounds(x-2,y+92,120,19);
     }
-    hpSlopeLabel.setBounds(45,571,85,22);hpSlope.setBounds(128,570,139,26);
-    lpSlopeLabel.setBounds(315,571,85,22);lpSlope.setBounds(399,570,139,26);
+    hpSlopeLabel.setBounds(45,571,78,22);hpSlope.setBounds(128,570,139,26);
+    lpSlopeLabel.setBounds(315,571,78,22);lpSlope.setBounds(399,570,139,26);
     highsSwitch.setBounds(875,472,28,26);highsLabel.setBounds(908,474,180,23);
     makeupSwitch.setBounds(875,514,28,26);makeupLabel.setBounds(908,516,180,23);
     apiInputSwitch.setBounds(55,762,35,30);apiOutputSwitch.setBounds(590,762,35,30);
